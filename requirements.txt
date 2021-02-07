@@ -1,0 +1,2 @@
+pywin32==227
+winregistry==0.8.3
