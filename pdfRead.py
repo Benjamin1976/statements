@@ -85,7 +85,7 @@ def existsInArrayFind(text, finds):
             # if text.strip() in find['find']:
             return find['skip']
             break
-    return -1
+    return None
 
 
 def valExistsNotEmpty(value, checkExists):
@@ -123,66 +123,157 @@ def backFillArray(backfill, value, values):
 
 
 
-# FRANK CC
-startEnd = {'pageStart': [{"find":  "TRANSACTION DATE", 'skip': 0}],  
-"pageEnd" : [{'find': "TOTAL AMOUNT DUE", 'skip': 0}], 
-"sectionStart": [{"find": r"^LAST MONTH'S BALANCE", 'skip': 0}
-], 
-"sectionEnd": [{"find": r"^SUBTOTAL", 'skip': 0}
-]}
-checks = { 
-    'date': [r'^[0-9]{2}[/]{1}[0-9]{2}'],
-    'foreign': [r'^FOREIGN CURRENCY'],
-    'ccyCode': [r'^[A-z]{2}$'],
-    'account' : [r'([0-9]{4}[-]{1}[0-9]{4}[-]{1}[0-9]{4}[-]{1}[0-9]{4})'],
-    'amount': [r'^\(?[0-9,\.]+\)?$'],
-    'description': [r'^.+$']
-}
+# 'date,description,amount,
+#  date,description,description,ccyCode,amount,
+#  date,description,description,amount,
+#  date,description,description,amount,
+#  date,description,ccyCode,amount,
+#  date,description,ccyCode,amount,
+#  date,description,ccyCode,amount,
+#  date,description,ccyCode,amount,
+#  date,description,ccyCode,amount,
+#  date,description,ccyCode,amount,
+#  date,description,description,ccyCode,amount,
+#  date,description,description,ccyCode,amount,
+#  date,description,description,ccyCode,amount,
+#  date,description,description,ccyCode,amount,
+#  date,description,description,ccyCode,amount,
+#  date,description,ccyCode,amount'
 
-styles = {
-'transDebitForeign': ['date', 'amount', 'description', 'foreign', 'description',' ccyCode', 'description' ],
-'transCreditForeign': ['date', 'amount', 'description', 'foreign', 'description',' ccyCode' ],
-'transCreditLocal': ['date', 'amount', 'description', 'description', 'description',' ccyCode' ],
-'payment': ['date', 'description', 'reference', 'amount'],
-'transDebit': ['date', 'amount', 'description', 'description'],
-'transDebit2': ['date', 'amount', 'description'],
-}
+# styles = {
+# 'transCCY2Desc': ['date', 'description', 'description', 'ccyCode', 'amount' ],
+# 'transCCY1Desc': ['date', 'description', 'ccyCode', 'amount' ],
+# 'trans': ['date', 'description', 'description', 'amount' ],
+# 'payment': ['date', 'description', 'amount' ],
+# }
 
-backfill = []
-account = {'accountStart' : [{'find': r'([0-9]{4}[-]{1}[0-9]{4}[-]{1}[0-9]{4}[-]{1}[0-9]{4})', 'skip': 0}]}
-ignore = [{'find': r'^\){1}$', 'skip': 0}]
-template = {'name': 'ocbc_cc_frank', 'startEnds': startEnd, 'styles': styles, 'checks': checks, 'account': account, 'ignore': ignore, 'backfill': backfill}
-templates.append(template)
+def matchPatternsByStyles(styles, transStyles, values):
+
+    newValues = []
+
+    # loop through the styles   
+    for name, style in styles.items():
+        allStylesFound = ",".join(transStyles)              # create a string of all the style fields
+        styleToFind = ','.join(style)                       # create a string of the style pattern to match
+        itemsInStyle = len(style)                           # count the number of items in the style pattern
+        matches = re.finditer(r'\b%s\b' % styleToFind, allStylesFound, re.MULTILINE)    # find the style pattern in all trans pattern
+
+        # loop through all the matches in reverse to find the trans style pattern
+        for matchNum, match in reversed(list(enumerate(matches, start=1))):
+            
+            # find the transaction style in the overall styles found
+            transStart = allStylesFound[1:match.start()]        # take the start of the style list to the match position
+            arrayStart = len(re.findall(r',', transStart))      # count the commas / array index @ match
+            arrayEnd = arrayStart + itemsInStyle
+
+            trans = values[arrayStart: arrayEnd]                # extract the actual field values
+            newValues.append(trans)                             # add to the new Transactions array
+            # print(trans)
+            # print('[Found Style] ', name, 'starting at', arrayStart)
+
+            # remove the items from the style lists
+            del values[arrayStart: arrayEnd] 
+            del transStyles[arrayStart: arrayEnd] 
+            # print(transStyles)
+
+    print('[Missed Styles]:', transStyles)
+    print('[Missed Values]:', values)
+
+    return newValues
+
+
+def matchPatternsByLines(styles, transStyles, values):
+
+    newValues = []
+    tempStyle = []
+
+    for style in transStyles:
+
+        matched = matchStyle(styles, tempStyle)
+        if matched != None:
+            newTran = values[0:len(tempStyle)]
+            newValues.append(newTran)
+            del values[0:len(tempStyle)]
+            tempStyle = []
+        else:
+            tempStyle.append(style)
+
+        if len(tempStyle) > 7:
+            print('Not matched')
+
+    return newValues
+
+    # # loop through the styles   
+    # for name, style in styles.items():
+    #     allStylesFound = ",".join(transStyles)              # create a string of all the style fields
+    #     styleToFind = ','.join(style)                       # create a string of the style pattern to match
+    #     itemsInStyle = len(style)                           # count the number of items in the style pattern
+    #     matches = re.finditer(r'\b%s\b' % styleToFind, allStylesFound, re.MULTILINE)    # find the style pattern in all trans pattern
+
+    #     # loop through all the matches in reverse to find the trans style pattern
+    #     for matchNum, match in reversed(list(enumerate(matches, start=1))):
+            
+    #         # find the transaction style in the overall styles found
+    #         transStart = allStylesFound[1:match.start()]        # take the start of the style list to the match position
+    #         arrayStart = len(re.findall(r',', transStart))      # count the commas / array index @ match
+    #         arrayEnd = arrayStart + itemsInStyle
+
+    #         trans = values[arrayStart: arrayEnd]                # extract the actual field values
+    #         newValues.append(trans)                             # add to the new Transactions array
+    #         print(trans)
+    #         # print('[Found Style] ', name, 'starting at', arrayStart)
+
+    #         # remove the items from the style lists
+    #         del values[arrayStart: arrayEnd] 
+    #         del transStyles[arrayStart: arrayEnd] 
+    #         # print(transStyles)
+
+    # return newValues
 
 
 
 
-thisDef = {'file': 'dbs-consolidated.pdf', 'template': 'dbs_cc'}  # 10
-thisDef = {'file': 'eStatement200104151222728937696.pdf', 'template': 'scb_cc'} #55
-thisDef = {'file': 'dbs-cashline.pdf', 'template': 'dbs_cl'}  # 5
+
 thisDef = {'file': 'FRANK CREDIT CARD-5534-Dec-20.pdf', 'template': 'ocbc_cc_frank'}  # 11
+thisDef = {'file': 'dbs-cashline.pdf', 'template': 'dbs_cl'}  # 5
+thisDef = {'file': 'dbs-consolidated.pdf', 'template': 'dbs_cc'}  # 10
+thisDef = {'file': 'CardStatement_012021.pdf', 'template': 'citi_cc'} #
+thisDef = {'file': 'eStatement200104151222728937696.pdf', 'template': 'scb_cc'} #55
+
+
+thisDef = {'file': '2021-01-07_Statement.pdf', 'template': 'hsbc_cc'} # doesn't work, images only
+thisDef = {'file': '11512aa8-e77d-4f46-90b9-cd1dea1c7fd3.pdf', 'template': 'anz_sav_old'} # old format didn't work - not full content
+
+
+thisDef = {'file': 'estatement (1).pdf', 'template': 'bankwest'} # 
+
+thisDef = {'file': 'estatement (60).pdf', 'template': 'bankwest'} # 
+
+
+thisDef = {'file': '2b776bd1-9e10-4520-a56a-431131983879.pdf', 'template': 'anz_cc'} #
+
+thisDef = {'file': 'f1feb0a8-a88a-4ac5-ac30-b34e691029dc.pdf', 'template': 'anz_sav'} # works, new format with single trans
+thisDef = {'file': '1f9c0d7a-feae-4976-aeed-0787d11730a8.pdf', 'template': 'anz_sav'} # checking with new format with multiple page
+
 
 trial = True
 trial = False
 
 
-def filterByLine(text, start, end, styles, checks, accountFind, ignore, backfill):
-    
-    
-    monthText = str( 'jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec')
 
+def filterByLine(text, start, end, styles, checks, accountFind, ignore, backfill, matchByStyles, includeBlanks):
+    
     lines = text.splitlines()
-    transStyle = []
+    transStyles = []
     lineType = None
     bRead = False
     skip = 0
     starts = 0
     i =0
 
-    fields = "date|description|amount|reference|ccyCode|ccyValue"
-    # ignore = 'PAYMENT − THANK YOU'
     account = None
     values = []
+    newValues = []
     value = {}
 
     for line in lines:
@@ -192,39 +283,47 @@ def filterByLine(text, start, end, styles, checks, accountFind, ignore, backfill
 
         # check if the account is found
         findAccount = existsInArrayFind(line, accountFind)
-        if findAccount > -1:
+        if findAccount != None:
             account=line
 
         # Check if the lineshould be read or skipped
         lineType = None
         if skip > 0: skip -= 1
 
-        foundStart = existsInArrayFind(line, start)
-        foundEnd = existsInArrayFind(line, end)
+        print(line)
+        if line.strip() == "09 DEC OPENING BALANCE":
+            print(line)
 
-        if foundStart > -1:
+        foundStart = existsInArrayFind(line.strip(), start)
+        foundEnd = existsInArrayFind(line.strip(), end)
+
+        if foundStart != None:
             bRead = True
             skip = 1 + foundStart
             starts += 1
         
-        elif foundEnd > -1:
+        elif foundEnd != None:
             bRead = False
+            if foundEnd < 0:
+                del values[foundEnd:]
 
         # check if the line should be ignored
         ignoreLine = existsInArrayFind(line, ignore)
-        if ignoreLine > -1:
+        if ignoreLine != None:
             skip = 1 + ignoreLine
 
+
+        # print (ignoreLine != None, ': ', line )
 
         # parse the line and check for attributes
         if (bRead) and (skip == 0):
 
-            bFound = False
-
             # check if attribute found
+            bFound = False
             for field, check in checks.items():     # loop through field checks
                 for chk in check:                    # loop through if field has multiple checks
                     if (not bFound) and (re.search(chk, line.strip(), re.IGNORECASE) != None):  
+                        # value=line.strip()
                         value[field]=line.strip()
                         lineType = field
                         bFound = True
@@ -233,45 +332,37 @@ def filterByLine(text, start, end, styles, checks, accountFind, ignore, backfill
             
             # if nothing found, check for date or mark blank / None
             if not bFound:
-                if monthText.find(line[-3:].lower()) > -1:
-                    lineType = 'date'
-                    value['date'] = line.strip()
-
-                elif len(line.strip()) == 0:
+                if len(line.strip()) == 0:
                     lineType = 'blank'
-
                 else:
                     lineType = None
-        
-            # update the account or transaction style
-            if (lineType == 'account'): 
-                value['account']=line
-            elif (lineType != None):
-                transStyle.append(lineType)
 
-            # if (len(transStyle) > 7):
-            #     print(transStyle)
-                
-            if lineType != None:
-                print(lineType + ': ' + line)
-                pass
 
-            # check if the transaction pattern matches
-            #   and add to transaction array  
-            matched = matchStyle(styles, transStyle)
-            if matched != None:
-                transStyle = []
-                value['account'] = account
+            if (lineType != None) and (lineType != 'blank'):
+                print('[', lineType, "]:", line)
+                    
 
-                # Backfill array with missing values
-                value = backFillArray(backfill, value, values)
-
+            if (lineType != 'account') and (lineType != None):
+                transStyles.append(lineType)
                 values.append(value)
-                value = {'account': account}
+                value = {}
+               
+    if matchByStyles:
+        newValues = matchPatternsByStyles(styles, transStyles, values)
+    else:
+        newValues = matchPatternsByLines(styles, transStyles, values)
 
-    return values    
+    # print('[Found Values]:', newValues)
+    print('[Found Styles]:', len(newValues))
+    return newValues    
 
     
+
+# Read all applicable lines into an array
+# Run through pattern array with most complex patterns first
+#       Loop through transaction patterns and remove the pattern if found
+#
+# this way simple patterns won't be matched incorrectly
 
 
 # ^\$?([0-9]{1,3},([0-9]{3},)*[0-9]{3}|[0-9]+)(.[0-9][0-9])?$
@@ -343,10 +434,8 @@ def readTheFile(thisDef, trial):
                     transPages = getPageSections(doc, template['startEnds']['pageStart'], template['startEnds']['pageEnd'])
                     if valExistsNotEmpty(transPages, False):
                         print('[Error] file content empty')
-    
-                    # print(transPages)
 
-                    transClean = filterByLine(transPages, template['startEnds']['sectionStart'], template['startEnds']['sectionEnd'], template['styles'], template['checks'], template['account']['accountStart'], template['ignore'], template['backfill'] )
+                    transClean = filterByLine(transPages, template['startEnds']['sectionStart'], template['startEnds']['sectionEnd'], template['styles'], template['checks'], template['account']['accountStart'], template['ignore'], template['backfill'], template['matchByStyles'], template['includeBlanks'] )
                     print(transClean)
                     
                     # print('Record count: ', len(transClean))
@@ -355,104 +444,46 @@ def readTheFile(thisDef, trial):
 
 readTheFile(thisDef, trial)
 
+# transStyles = ['date', 'description', 'amount', 
+# 'date', 'description', 'amount', 
+# 'date', 'description', 'amount', 
+# 'date', 'description', 'amount', 'currency', 'description',
+# 'date', 'description', 'amount', 'currency', 'description',
+# 'date', 'description', 'amount', 
+# 'date', 'description', 'amount', 
+# 'date', 'description', 'amount', 'currency', 'description',
+# 'date', 'description', 'amount', 'currency', 'description',
+# 'date', 'description', 'amount', 'currency', 'description',
+# 'date', 'description', 'amount', 
+# ]
 
+# transStyles2 = ['1', '2', '3', 
+# '4', '5', '6', 
+# '7', '8', '9', 
+# '10', '11', '12', 'currency', 'description',
+# 'date', 'description', 'amount', 'currency', 'description',
+# 'date', 'description', 'amount', 
+# '121', '878', '989', 
+# 'date', 'description', 'amount', 'currency', 'description',
+# 'date', 'description', 'amount', 'currency', 'description',
+# '15', '16', '17', '18', '19',
+# 'date', 'description', 'amount', 
+# ]
 
-    
+# # 1st @ 9
 
-
-## start -----------------------------
-# YOUR CARD / PERSONAL LOANS TRANSACTIONS
-# VISA CASHONE PLATINUM
-# 4300−9201−0161−3774
-# Transaction Reference
-# SGD Amount
-# Transaction
-# Date
-# Posting
-# Date
-# Description
-# Currency Amount
-# 37,313.73
-# BALANCE FROM PREVIOUS STATEMENT
-
-
-## two dates -----------------------------
-# 74055269332296697800749
-# JEWEL COFFEE        SINGAPORE   SG
-
-
-# 29 Nov
-# 28 Nov
-#        5.58
-
-## single date -----------------------------
-# GUILT−FREE          SINGAPORE   SG
-
-#       13.00
-
-# 29 Nov
-# 74890299332102888747531
-
-## double date with currency -----------------------------
-# 74889609329085120700012
-# METAL LITE MC FORT  TAGUIG CITY PH
-#     18900.00
-# PHP
-# 26 Nov
-# 23 Nov
-#      526.03
-
-## payment -----------------------------
-# PAYMENT − THANK YOU
-
-
-# 13 Dec
-# 13 Dec
-#    1,260.00CR
-
-
-## end of list 1 -----------------------------
-# To be continued
-
-# Ref No :
-# Page: 4 of 7
-# Statement Date: 24 Dec 2019
-# Payment Due Date: 18 Jan 2020
-# PARSONS BENJAMIN LEE
-# YOUR CARD / PERSONAL LOANS TRANSACTIONS
-# VISA CASHONE PLATINUM
-# 4300−9201−0161−3774
-# Transaction Reference
-# SGD Amount
-# Transaction
-# Date
-# Posting
-# Date
-# Description
-# Currency Amount
-
-
-
-## end of list final -----------------------------
-# 1,280.60
-# MINIMUM PAYMENT DUE
-# NEW BALANCE
-# 40,914.47
+# styles = { 'style1' : ['date', 'description', 'amount', 'currency', 'description'],
+#             'style2' : ['date', 'description', 'amount']
+#             }
 
 
 
 
-# print(text)
 
-# def readPDF():
-#     file = open(r'eStatement200104151222728937696.pdf','rb')
-#     readfile = reader.PdfFileReader(file, strict=False)
-#     # for text in readfile.getPage(0):
-#     #     print(text)
-#     page = readfile.getPage(0)
-#     page_content = page.extractText()
-#     print(page_content)
-#     pagecount = readfile.getNumPages()
-#     return {'data': pagecount}
 
-# print(readPDF())
+# for style in styles:
+#     if style in list1:
+#         print('found')
+
+
+
